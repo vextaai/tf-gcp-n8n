@@ -4,6 +4,11 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 4.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.1"
+    }
+
   }
 }
 
@@ -59,17 +64,17 @@ resource "google_sql_database_instance" "n8n_db_instance" {
   name             = "${var.cloud_run_service_name}-db"
   project          = var.gcp_project_id
   region           = var.gcp_region
-  database_version = "POSTGRES_13"
+  database_version = "POSTGRES_16"
   settings {
     tier              = var.db_tier
     availability_type = "ZONAL"
     disk_type         = "PD_HDD"
     disk_size         = var.db_storage_size
     backup_configuration {
-      enabled = false
+      enabled = true
     }
   }
-  deletion_protection = false
+  deletion_protection = true
   depends_on          = [google_project_service.sqladmin]
 }
 
