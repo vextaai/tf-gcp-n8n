@@ -24,7 +24,13 @@ data "google_project" "project" {
 
 # --- Services --- #
 resource "google_project_service" "artifactregistry" {
+  count              = var.use_custom_image ? 1 : 0
   service            = "artifactregistry.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "storage" {
+  service            = "storage.googleapis.com"
   disable_on_destroy = false
 }
 
@@ -48,6 +54,52 @@ resource "google_project_service" "cloudresourcemanager" {
   disable_on_destroy = false
 }
 
+resource "google_project_service" "drive" {
+  service            = "drive.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "sheets" {
+  service            = "sheets.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "bigquery" {
+  service            = "bigquery.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "pubsub" {
+  service            = "pubsub.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "iam" {
+  service            = "iam.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "logging" {
+  service            = "logging.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "monitoring" {
+  service            = "monitoring.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "iamcredentials" {
+  service            = "iamcredentials.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "vision" {
+  service            = "vision.googleapis.com"
+  disable_on_destroy = false
+}
+
+
 # --- Artifact Registry (Optional - only for custom image) --- #
 resource "google_artifact_registry_repository" "n8n_repo" {
   count         = var.use_custom_image ? 1 : 0
@@ -67,6 +119,7 @@ resource "google_sql_database_instance" "n8n_db_instance" {
   database_version = "POSTGRES_16"
   settings {
     tier              = var.db_tier
+    edition           = "ENTERPRISE" # Добавьте эту строку
     availability_type = "ZONAL"
     disk_type         = "PD_HDD"
     disk_size         = var.db_storage_size
@@ -165,6 +218,62 @@ resource "google_project_iam_member" "sql_client" {
   member  = "serviceAccount:${google_service_account.n8n_sa.email}"
 }
 
+# --- Google Cloud Storage Bucket --- #
+resource "random_string" "bucket_prefix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+locals {
+  # Use provided bucket name or generate a unique one
+  bucket_name = var.storage_bucket_name != "" ? var.storage_bucket_name : "n8n-receipts-bucket-${random_string.bucket_prefix.result}"
+  binary_bucket_name = var.binary_storage_bucket_name != "" ? var.binary_storage_bucket_name : "n8n-binary-files-${random_string.bucket_prefix.result}"
+}
+
+resource "google_storage_bucket" "receipts_bucket" {
+  name          = local.bucket_name
+  project       = var.gcp_project_id
+  location      = var.gcp_region
+  force_destroy = false # Set to true if you want to easily delete buckets with content (for dev only)
+  depends_on    = [google_project_service.storage]
+}
+
+resource "google_storage_bucket_iam_member" "n8n_storage_writer" {
+  bucket = google_storage_bucket.receipts_bucket.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.n8n_sa.email}"
+}
+
+resource "google_storage_bucket_iam_member" "n8n_storage_viewer" {
+  bucket = google_storage_bucket.receipts_bucket.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.n8n_sa.email}"
+}
+
+# --- Google Cloud Storage Bucket for Binary Files --- #
+resource "google_storage_bucket" "binary_files_bucket" {
+  name          = local.binary_bucket_name
+  project       = var.gcp_project_id
+  location      = var.gcp_region
+  force_destroy = false # Set to true if you want to easily delete buckets with content (for dev only)
+  depends_on    = [google_project_service.storage]
+}
+
+resource "google_storage_bucket_iam_member" "n8n_binary_storage_writer" {
+  bucket = google_storage_bucket.binary_files_bucket.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.n8n_sa.email}"
+}
+
+resource "google_storage_bucket_iam_member" "n8n_binary_storage_viewer" {
+  bucket = google_storage_bucket.binary_files_bucket.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.n8n_sa.email}"
+}
+
+
+
 # --- Cloud Run Service --- #
 locals {
   # Use official image or custom image based on variable
@@ -197,6 +306,13 @@ resource "google_cloud_run_v2_service" "n8n" {
         instances = [google_sql_database_instance.n8n_db_instance.connection_name]
       }
     }
+    volumes {
+      name = "gcs-binary-data"
+      gcs {
+        bucket    = local.binary_bucket_name
+        read_only = false
+      }
+    }
     containers {
       image = local.n8n_image
       
@@ -208,6 +324,11 @@ resource "google_cloud_run_v2_service" "n8n" {
         name       = "cloudsql"
         mount_path = "/cloudsql"
       }
+      volume_mounts {
+        name       = "gcs-binary-data"
+        mount_path = "/gcs/${local.binary_bucket_name}"
+      }
+
       ports {
         container_port = var.cloud_run_container_port
       }
@@ -259,7 +380,7 @@ resource "google_cloud_run_v2_service" "n8n" {
       }
       env {
         name  = "DB_POSTGRESDB_SCHEMA"
-        value = "public"
+        value = "n8n"
       }
       env {
         name  = "N8N_USER_FOLDER"
@@ -311,6 +432,14 @@ resource "google_cloud_run_v2_service" "n8n" {
         name  = "N8N_PROXY_HOPS"
         value = "1"
       }
+      env {
+        name  = "N8N_BINARY_DATA_MODE"
+        value = "filesystem"
+      }
+      env {
+        name  = "N8N_BINARY_DATA_FILESYSTEM_PATH"
+        value = "/gcs/${local.binary_bucket_name}"
+      }
 
       startup_probe {
         initial_delay_seconds = 30
@@ -344,3 +473,4 @@ resource "google_cloud_run_v2_service_iam_member" "n8n_public_invoker" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+

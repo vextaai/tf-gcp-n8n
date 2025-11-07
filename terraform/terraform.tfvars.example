@@ -1,14 +1,15 @@
 # Example terraform.tfvars file
 # Rename this to terraform.tfvars and fill in the sensitive values.
 
-# --- Optional (Defaults are likely suitable based on your setup) --- #
-# gcp_project_id = "your-project-id"
-# gcp_region     = "us-west2"
+gcp_project_id = "genuine-box-477410-m5"
+gcp_region     = "europe-north1"
 
 # db_name        = "n8n"
 # db_user        = "n8n-user"
 # db_tier        = "db-f1-micro"
 # db_storage_size = 10
+
+generic_timezone = "Europe/Stockholm"
 
 # use_custom_image = false
 # artifact_repo_name = "n8n-repo"

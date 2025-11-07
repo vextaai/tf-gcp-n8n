@@ -6,7 +6,7 @@ variable "gcp_project_id" {
 variable "gcp_region" {
   description = "Google Cloud region for deployment."
   type        = string
-  default     = "us-west2"
+  default     = "europe-north2"
 }
 
 variable "use_custom_image" {
@@ -84,5 +84,17 @@ variable "cloud_run_container_port" {
 variable "generic_timezone" {
   description = "Timezone for n8n."
   type        = string
-  default     = "UTC"
+  default     = "Europe/Stockholm"
+}
+
+variable "storage_bucket_name" {
+  description = "Optional: Name for the Google Cloud Storage bucket for receipts. If not provided, a unique name will be generated."
+  type        = string
+  default     = ""
+}
+
+variable "binary_storage_bucket_name" {
+  description = "Optional: Name for the Google Cloud Storage bucket for n8n binary files. If not provided, a unique name will be generated."
+  type        = string
+  default     = ""
 }
