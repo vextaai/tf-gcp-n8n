@@ -2,12 +2,14 @@
 # Rename this to terraform.tfvars and fill in the sensitive values.
 
 gcp_project_id = "genuine-box-477410-m5"
-gcp_region     = "europe-north1"
+gcp_region     = "europe-north2"
 
 # db_name        = "n8n"
 # db_user        = "n8n-user"
 # db_tier        = "db-f1-micro"
 # db_storage_size = 10
+
+storage_bucket_name = "kvittor_storage"
 
 generic_timezone = "Europe/Stockholm"
 
